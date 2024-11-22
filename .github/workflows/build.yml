@@ -1,5 +1,9 @@
 name: Build Deno Executables
 
+permissions:
+  contents: read
+  releases: write
+
 # Trigger the workflow on push, pull request, or manually
 on:
   push:
