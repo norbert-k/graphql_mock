@@ -1,0 +1,117 @@
+name: Build Deno Executables
+
+# Trigger the workflow on push, pull request, or manually
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Executable for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # Define the different OS and target configurations
+        include:
+          - os: ubuntu-latest
+            name: linux
+            extension: ""
+            target: "x86_64-unknown-linux-gnu"
+          - os: windows-latest
+            name: windows
+            extension: ".exe"
+            target: "x86_64-pc-windows-msvc"
+          - os: macos-latest
+            name: macos-intel
+            extension: ""
+            target: "x86_64-apple-darwin"
+          - os: macos-latest
+            name: macos-m1
+            extension: ""
+            target: "aarch64-apple-darwin"
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Deno
+      - name: Set Up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: '1.x'  # Specify the Deno version you prefer
+
+      # Step 3: Cache Deno Modules
+      - name: Cache Deno Modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/deno
+            ~/.deno
+          key: ${{ runner.os }}-deno-${{ hashFiles('**/deps.ts', '**/index.ts') }}
+          restore-keys: |
+            ${{ runner.os }}-deno-
+
+      # Step 4: Install Dependencies
+      - name: Install Dependencies
+        run: deno cache index.ts
+
+      # Step 5: Build the Executable
+      - name: Build Executable
+        run: |
+          deno compile \
+            --output myapp-${{ matrix.name }}${{ matrix.extension }} \
+            --target ${{ matrix.target }} \
+            index.ts
+
+      # Step 6: Upload Executable as Artifact
+      - name: Upload Executable Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: myapp-${{ matrix.name }}${{ matrix.extension }}
+          path: ./myapp-${{ matrix.name }}${{ matrix.extension }}
+
+  release:
+    name: Create GitHub Release with Executables
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      # Step 7: Download All Build Artifacts
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: ./build-artifacts
+
+      # Step 8: Create a Zip Archive of Executables
+      - name: Create Zip Archive
+        run: |
+          cd build-artifacts
+          zip -r ../executables.zip .
+
+      # Step 9: Create a GitHub Release
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Automatically provided by GitHub
+        with:
+          tag_name: v1.${{ github.run_number }}
+          release_name: Release v1.${{ github.run_number }}
+          draft: false
+          prerelease: false
+
+      # Step 10: Upload Executables to the Release
+      - name: Upload Executables to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./executables.zip
+          asset_name: myapp-executables.zip
+          asset_content_type: application/zip
