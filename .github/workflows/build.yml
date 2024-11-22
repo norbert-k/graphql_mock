@@ -64,8 +64,7 @@ jobs:
       # Step 5: Build the Executable
       - name: Build Executable
         run: |
-          deno compile \
-            --no-check \
+          deno compile --no-check \
             --output myapp-${{ matrix.name }}${{ matrix.extension }} \
             --target ${{ matrix.target }} \
             index.ts
